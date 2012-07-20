@@ -49,15 +49,18 @@ class Database(connection: Connection) extends Validations {
    * Opens a transaction which is committed after `f` is called.
    * If `f` throws an exception, the transaction is rolled back.
    */
-  def transaction[A](f: Transaction => A): A = try {
-    connection setAutoCommit false
-    val result = f(new Transaction(connection))
-    connection.commit()
-    result
-  } catch {
-    case e => { connection.rollback(); throw e }
-  } finally {
-    connection setAutoCommit true
+  def transaction[A](f: Transaction => A): A = {
+    val autoCommit = connection getAutoCommit()
+    try {
+      connection setAutoCommit false
+      val result = f(new Transaction(connection))
+      connection.commit()
+      result
+    } catch {
+      case e => { connection.rollback(); throw e }
+    } finally {
+      if (autoCommit) connection setAutoCommit true
+    }
   }
 
   /**
@@ -65,10 +68,11 @@ class Database(connection: Connection) extends Validations {
    * If `f` returns a Left value, the transaction is rolled back.
    */
   def transactionEither[A, B](f: Transaction => Either[A, B]): Either[A, B] = {
+    val autoCommit = connection getAutoCommit()
     connection setAutoCommit false
     val result = f(new Transaction(connection))
     result.fold( _ => connection.rollback(), _ => connection.commit())
-    connection setAutoCommit true
+    if (autoCommit) connection setAutoCommit true
     result
   }
 
